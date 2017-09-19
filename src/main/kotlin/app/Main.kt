@@ -5,6 +5,7 @@ package app
 
 import app.api.ServerApi
 import app.config.FileConfigurator
+import app.hashers.TestPerfomanceHasher
 import app.model.LocalRepo
 import app.ui.ConsoleUi
 import app.utils.CommandConfig
@@ -26,6 +27,9 @@ class Main {
     private val api = ServerApi(configurator)
 
     constructor(argv: Array<String>) {
+        TestPerfomanceHasher.test()
+        return
+
         val options = Options()
         val commandAdd = CommandAdd()
         val commandConfig = CommandConfig()
