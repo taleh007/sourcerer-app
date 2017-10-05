@@ -39,10 +39,8 @@ buildConfig {
         apiBasePath = 'https://sourcerer.io/api/commit'
     }
     apiBasePath = project.hasProperty('api') ? api : apiBasePath
-    buildConfigField 'String', 'API_BASE_PATH', apiBasePath
 
-    println 'Env ' + ext.environment
-    println apiBasePath
+    buildConfigField 'String', 'API_BASE_PATH', apiBasePath
 
     // Common.
     buildConfigField 'String', 'PROFILE_URL', 'https://sourcerer.io/'
