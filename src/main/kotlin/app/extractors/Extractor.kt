@@ -10,8 +10,8 @@ import app.model.DiffFile
 class Extractor : ExtractorInterface {
     companion object {
         val TYPE_LANGUAGE = 1
-        val TYPE_KEYWORD = 2
-        val TYPE_LIBRARY = 3
+        val TYPE_LIBRARY = 2
+        val TYPE_KEYWORD = 3
         val SEPARATOR = ">"
     }
 

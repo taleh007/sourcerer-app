@@ -6,6 +6,12 @@ package app.extractors
 
 import app.model.DiffFile
 import app.model.CommitStats
+import org.dmg.pmml.FieldName
+import org.jpmml.evaluator.Evaluator
+import org.jpmml.evaluator.FieldValue
+import org.jpmml.evaluator.ModelEvaluatorFactory
+import org.jpmml.evaluator.ProbabilityDistribution
+import org.jpmml.model.PMMLUtil
 
 interface ExtractorInterface {
     companion object {
@@ -13,6 +19,14 @@ interface ExtractorInterface {
             return ExtractorInterface::class.java.classLoader
                 .getResourceAsStream("data/libraries/${name}_libraries.txt")
                 .bufferedReader().readLines().toSet()
+        }
+        fun getLibrariesModelEvaluator(name: String): Evaluator {
+            val pmml = PMMLUtil.unmarshal(
+                           ExtractorInterface::class.java.classLoader
+                           .getResourceAsStream("data/models/$name.pmml"))
+            val evaluator = ModelEvaluatorFactory.newInstance()
+                                                 .newModelEvaluator(pmml)
+            return evaluator
         }
     }
 
@@ -90,15 +104,51 @@ interface ExtractorInterface {
     }
 
     fun tokenize(line: String): List<String> {
-        val regex =
-            Regex("""\s|,|;|\*|\n|\(|\)|\[|]|\{|}|\+|=|&|\$|!=|\.|>|<|#|@|:|\?""")
-        val tokens = regex.split(line)
-            .filter { it.isNotBlank() && !it.contains('"') && !it.contains('"')
-                && it != "-"}
+        val stringRegex = Regex("""(".+?"|'.+?')""")
+        val newLine = stringRegex.replace(line, "")
+        //TODO: multiline comment regex
+        val splitRegex =
+            Regex("""\s|,|;|\*|\n|\(|\)|\[|]|\{|}|\+|=|&|\$|!=|\.|>|<|#|@|:|\?|!""")
+        val tokens = splitRegex.split(newLine)
+            .filter { it.isNotBlank() && !it.contains('"') && !it.contains('\'')
+                && it != "-" && it != "@"}
         return tokens
     }
 
     fun getLineLibraries(line: String, fileLibraries: List<String>): List<String> {
         return listOf()
+    }
+
+    fun getLineLibraries(line: String,
+                          fileLibraries: List<String>,
+                          evaluator: Evaluator,
+                          languageLabel: String): List<String> {
+        val arguments = LinkedHashMap<FieldName, FieldValue>()
+
+        for (inputField in evaluator.inputFields) {
+            val inputFieldName = inputField.name
+            val tokenizedLine = tokenize(line).joinToString(separator = " ")
+            val inputFieldValue = inputField.prepare(tokenizedLine)
+            arguments.put(inputFieldName, inputFieldValue)
+        }
+        val result = evaluator.evaluate(arguments)
+
+        val targetFieldName = evaluator.targetFields[0].name
+        val targetFieldValue = result[targetFieldName] as ProbabilityDistribution
+
+        val categoryValues = targetFieldValue.categoryValues.toList()
+        val probabilities = categoryValues.map { targetFieldValue.getProbability(it) }
+        val maxProbability = probabilities.max() as Double
+        val maxProbabilityCategory = categoryValues[probabilities.indexOf(maxProbability)]
+        val selectedCategories = categoryValues.filter {
+            targetFieldValue.getProbability(it) >= 0.1 * maxProbability
+        }
+
+        if (maxProbabilityCategory == languageLabel) {
+            return emptyList()
+        }
+
+        val lineLibraries = fileLibraries.filter { it in selectedCategories }
+        return lineLibraries
     }
 }
