@@ -106,7 +106,7 @@ interface ExtractorInterface {
     fun tokenize(line: String): List<String> {
         val stringRegex = Regex("""(".+?"|'.+?')""")
         val newLine = stringRegex.replace(line, "")
-        //TODO: multiline comment regex
+        //TODO(lyaronskaya): multiline comment regex
         val splitRegex =
             Regex("""\s|,|;|\*|\n|\(|\)|\[|]|\{|}|\+|=|&|\$|!=|\.|>|<|#|@|:|\?|!""")
         val tokens = splitRegex.split(newLine)
