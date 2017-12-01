@@ -19,4 +19,8 @@ Please search before creating a new issue. Feel free to add issues related to th
 
 We will review your Pull Request as soon as possible. Thank you for contributing!
 
+## Integration testing
+
+We will work on a special environment for contributors in the nearest future. For now one should use his personal or additional account on site.
+
 We value input from each member of the community, however we urge you to abide by [code of conduct](https://github.com/sourcerer-io/sourcerer-app/blob/master/CODE_OF_CONDUCT.md).
