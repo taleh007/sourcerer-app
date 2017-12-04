@@ -60,25 +60,21 @@ class RepoHasher(private val localRepo: LocalRepo, private val api: Api,
             }
 
             // Hash by all plugins.
-            val observable = CommitCrawler.getObservable(git, serverRepo,
-                rehashes.size).publish()
+            val jgitObservable = CommitCrawler.getJGitObservable(git).publish()
+            val observable = CommitCrawler.getObservable(
+                git, jgitObservable, serverRepo, rehashes.size)
+
             CommitHasher(serverRepo, api, rehashes, filteredEmails)
                 .updateFromObservable(observable, onError)
             FactHasher(serverRepo, api, rehashes, filteredEmails)
                 .updateFromObservable(observable, onError)
 
-            // Start and synchronously wait until all subscribers complete.
-            observable.connect()
+            CodeLongevity(serverRepo, filteredEmails, git, onError, jgitObservable)
+                .updateFromObservable(api)
 
-            // TODO(anatoly): CodeLongevity hash from observable.
-            Logger.print("Code longevity calculation. May take a while...")
-            try {
-                CodeLongevity(serverRepo, filteredEmails, git, onError)
-                    .updateStats(api)
-            }
-            catch (e: Throwable) {
-                onError(e)
-            }
+            // Start and synchronously wait until all subscribers complete.
+            Logger.print("Stats computation. May take a while...")
+            jgitObservable.connect()
             Logger.print("Finished.")
 
             if (errors.isNotEmpty()) {

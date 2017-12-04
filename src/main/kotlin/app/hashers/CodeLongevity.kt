@@ -14,6 +14,7 @@ import app.utils.RepoHelper
 import io.reactivex.Observable
 import org.eclipse.jgit.diff.DiffFormatter
 import org.eclipse.jgit.diff.DiffEntry
+import org.eclipse.jgit.diff.EditList
 import org.eclipse.jgit.diff.RawText
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib.AnyObjectId
@@ -142,10 +143,14 @@ class CodeLineAges : Serializable {
 /**
  * Used to compute age of code lines in the repo.
  */
-class CodeLongevity(private val serverRepo: Repo,
-                    private val emails: HashSet<String>,
-                    git: Git,
-                    private val onError: (Throwable) -> Unit) {
+class CodeLongevity(
+    private val serverRepo: Repo,
+    private val emails: HashSet<String>,
+    private val git: Git,
+    private val onError: (Throwable) -> Unit,
+    private val diffObservable:
+        Observable<Pair<RevCommit, List<Pair<DiffEntry, EditList>>>>? = null) {
+
     val repo: Repository = git.repository
     val revWalk = RevWalk(repo)
     val head: RevCommit =
@@ -161,9 +166,9 @@ class CodeLongevity(private val serverRepo: Repo,
     }
 
     /**
-     * Update code line age statistics on the server.
+     * Updates code line age statistics on the server.
      */
-    fun updateStats(api: Api) {
+    fun updateFromObservable(api: Api) {
         // If no changes, then nothing to update, return early.
         val ages = scan() ?: return
 
@@ -332,12 +337,14 @@ class CodeLongevity(private val serverRepo: Repo,
             }
         }
 
-        getDiffsObservable(tail).blockingSubscribe( { (commit, diffs) ->
+        (diffObservable ?: CommitCrawler.getJGitObservable(git))
+        .takeWhile { (commit, _) -> commit != tail }
+        .subscribe( { (commit, diffs) ->
             // A step back in commits history. Update the files map according
             // to the diff. Traverse the diffs backwards to handle double
             // renames properly.
             // TODO(alex): cover file renames by tests (see APP-132 issue).
-            for (diff in diffs.asReversed()) {
+            for ((diff, editList) in diffs.asReversed()) {
                 val oldPath = diff.getOldPath()
                 val oldId = diff.getOldId().toObjectId()
                 val newPath = diff.getNewPath()
@@ -379,7 +386,6 @@ class CodeLongevity(private val serverRepo: Repo,
                 // Update the lines array according to diff insertions.
                 // Traverse the edit list backwards to keep indices of
                 // the edit list and the lines array in sync.
-                val editList = df.toFileHeader(diff).toEditList()
                 for (edit in editList.asReversed()) {
                     // Insertion case: track the lines.
                     val insCount = edit.getLengthB()
@@ -456,44 +462,6 @@ class CodeLongevity(private val serverRepo: Repo,
                     }
                 }
             }
-        }
-
-        subscriber.onComplete()
-    }
-
-    /**
-     * Iterates over the diffs between commits in the repo's history.
-     */
-    private fun getDiffsObservable(tail : RevCommit?) :
-        Observable<Pair<RevCommit, List<DiffEntry>>> =
-        Observable.create { subscriber ->
-
-        revWalk.markStart(head)
-        var commit: RevCommit? = revWalk.next()  // Move the walker to the head.
-        while (commit != null && commit != tail) {
-            val parentCommit: RevCommit? = revWalk.next()
-
-            // Smart casts are not yet supported for a mutable variable captured
-            // in an inline lambda, see
-            // https://youtrack.jetbrains.com/issue/KT-7186.
-            if (Logger.isDebug) {
-                val commitName = commit.getName()
-                val commitMsg = commit.getShortMessage()
-                Logger.debug { "commit: $commitName; '$commitMsg'" }
-                if (parentCommit != null) {
-                    val parentCommitName = parentCommit.getName()
-                    val parentCommitMsg = parentCommit.getShortMessage()
-                    Logger.debug {
-                        "parent commit: ${parentCommitName}; '${parentCommitMsg}'"
-                    }
-                }
-                else {
-                    Logger.debug { "parent commit: null" }
-                }
-            }
-
-            subscriber.onNext(Pair(commit, df.scan(parentCommit, commit)))
-            commit = parentCommit
         }
 
         subscriber.onComplete()
